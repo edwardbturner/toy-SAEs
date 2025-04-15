@@ -1,20 +1,29 @@
-import numpy as np
 import torch
 from torch.utils.data import Dataset
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, n_samples=1000, signal_dim=10, noise_level=0.1, sparsity=0.3, curvature_scale=1.0, seed=42):
+    def __init__(
+        self,
+        n_samples=1000,
+        signal_dim=10,
+        noise_level=0.1,
+        sparsity=0.3,
+        curvature_scale=1.0,
+        seed=42,
+        space_type="hyperbolic",  # Options: "hyperbolic", "spherical", "euclidean"
+    ):
         """
-        Create a synthetic dataset with controllable noise, sparsity, and curvature.
+        Create a synthetic dataset with controllable noise, sparsity, and non-Euclidean geometry.
 
         Args:
             n_samples: Number of samples in the dataset
             signal_dim: Dimension of the underlying signal
             noise_level: Standard deviation of the Gaussian noise
             sparsity: Fraction of non-zero coefficients (between 0 and 1)
-            curvature_scale: Scale of the Gaussian curvature components
+            curvature_scale: Scale of the curvature (negative for hyperbolic, positive for spherical)
             seed: Random seed for reproducibility
+            space_type: Type of geometric space ("hyperbolic", "spherical", "euclidean")
         """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         torch.manual_seed(seed)
@@ -27,32 +36,37 @@ class SyntheticDataset(Dataset):
         coefficients = torch.zeros(n_samples, signal_dim, device=device)
         n_nonzero = int(signal_dim * sparsity)
 
-        # Generate all non-zero indices at once
         nonzero_indices = torch.stack([torch.randperm(signal_dim, device=device)[:n_nonzero] for _ in range(n_samples)])
-
-        # Generate all non-zero values at once
         nonzero_values = torch.randn(n_samples, n_nonzero, device=device)
-
-        # Efficiently assign non-zero values using scatter_
         coefficients.scatter_(1, nonzero_indices, nonzero_values)
 
-        # Generate Gaussian curvature components
-        # Create a 1D grid of points for the Gaussian
-        x = torch.linspace(-3, 3, signal_dim, device=device)
+        if space_type == "hyperbolic":
+            # Generate points in hyperbolic space (Poincaré ball model)
+            # First generate points in Euclidean space
+            euclidean_points = torch.randn(n_samples, signal_dim, device=device)
+            euclidean_norm = torch.norm(euclidean_points, dim=1, keepdim=True)
 
-        # Generate random centers and scales for the Gaussians
-        centers = torch.rand(n_samples, 1, device=device) * 6 - 3
-        scales = torch.rand(n_samples, 1, device=device) * 2 + 0.5
+            # Project to hyperbolic space using Poincaré ball model
+            # The curvature_scale controls the "radius" of the hyperbolic space
+            hyperbolic_points = euclidean_points / (1 + torch.sqrt(1 + curvature_scale * euclidean_norm**2))
 
-        # Compute Gaussian curvature for each sample
-        curvature = torch.zeros(n_samples, signal_dim, device=device)
-        for i in range(n_samples):
-            # Compute 1D Gaussian
-            gaussian = torch.exp(-((x - centers[i]) ** 2) / (2 * scales[i] ** 2))
-            curvature[i] = gaussian * curvature_scale
+            # Combine with sparse components
+            self.clean_data = coefficients @ signal_basis + hyperbolic_points
 
-        # Combine sparse and curvature components
-        self.clean_data = coefficients @ signal_basis + curvature
+        elif space_type == "spherical":
+            # Generate points on a sphere
+            spherical_points = torch.randn(n_samples, signal_dim, device=device)
+            spherical_points = spherical_points / torch.norm(spherical_points, dim=1, keepdim=True)
+
+            # Scale by curvature (radius of the sphere)
+            spherical_points = spherical_points * curvature_scale
+
+            # Combine with sparse components
+            self.clean_data = coefficients @ signal_basis + spherical_points
+
+        else:  # euclidean
+            # Original Euclidean space generation
+            self.clean_data = coefficients @ signal_basis
 
         # Add noise
         self.noise = torch.randn(n_samples, signal_dim, device=device) * noise_level
