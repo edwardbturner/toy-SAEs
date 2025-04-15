@@ -10,7 +10,6 @@ from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
 from torch.utils.data import DataLoader
 from tqdm import tqdm  # type: ignore
 
-from config import ExperimentConfig, default_config
 from dataset import SyntheticDataset
 from sae import SparseAutoencoder
 
@@ -143,157 +142,54 @@ def train_sae(
         raise
 
 
-def run_experiment(config: ExperimentConfig = default_config) -> None:
+def plot_results(results: dict[Any, dict[str, list[float]]], output_dir: str) -> None:
     """
-    Run the complete experiment with the given configuration.
-
-    Args:
-        config: Experiment configuration. Uses default_config if not specified.
-    """
-    try:
-        # Initialize results storage
-        results: dict[bool, dict[Any, dict[str, list[float]]]] = {}
-        for is_sparse in [False, True]:
-            results[is_sparse] = {}
-            for series_val in config.get_varying_params()[config.plot_series]:
-                results[is_sparse][series_val] = {metric: [] for metric in config.metrics_to_plot}
-
-        # Get fixed parameters
-        fixed_params = config.get_fixed_params()
-
-        # Run experiments
-        for is_sparse in [False, True]:
-            logger.info(f"\nRunning experiments with {'sparse' if is_sparse else 'non-sparse'} signals")
-
-            for series_val in tqdm(config.get_varying_params()[config.plot_series], desc="Series values"):
-                # Create experiment config with current parameters
-                current_config = ExperimentConfig(
-                    **{
-                        **config.__dict__,
-                        **fixed_params,
-                        config.plot_series: series_val,
-                    }
-                )
-
-                # Create datasets
-                train_dataset = SyntheticDataset(
-                    current_config.n_train_samples,
-                    current_config.base_signal_dim,
-                    current_config.noise_level,
-                    sparsity=current_config.signal_sparsity if is_sparse else 1.0,
-                    curvature_scale=current_config.curvature_scales[0] if current_config.curvature_scales else 1.0,
-                    space_type=current_config.space_type,
-                )
-                test_dataset = SyntheticDataset(
-                    current_config.n_test_samples,
-                    current_config.base_signal_dim,
-                    current_config.noise_level,
-                    sparsity=current_config.signal_sparsity if is_sparse else 1.0,
-                    curvature_scale=current_config.curvature_scales[0] if current_config.curvature_scales else 1.0,
-                    space_type=current_config.space_type,
-                    seed=43,
-                )
-
-                train_loader = DataLoader(
-                    train_dataset, batch_size=current_config.batch_size, shuffle=True, pin_memory=False, num_workers=0
-                )
-                test_loader = DataLoader(
-                    test_dataset, batch_size=current_config.batch_size, pin_memory=False, num_workers=0
-                )
-
-                # Train and evaluate
-                metrics = train_sae(
-                    train_loader,
-                    test_loader,
-                    current_config.base_signal_dim,
-                    int(current_config.base_signal_dim * current_config.hidden_dim_ratios[0]),
-                    current_config.sparsity_weight,
-                    current_config.n_epochs,
-                    current_config.lr,
-                    current_config.early_stopping_patience,
-                )
-
-                # Store results
-                for metric in config.metrics_to_plot:
-                    results[is_sparse][series_val][metric].append(metrics[metric])
-
-        # Plot results
-        plot_results(results, config)
-
-    except Exception as e:
-        logger.error(f"Error running experiment: {str(e)}")
-        raise
-
-
-def plot_results(results: dict[bool, dict[Any, dict[str, list[float]]]], config: ExperimentConfig) -> None:
-    """
-    Plot and save the experiment results.
+    Plot the experiment results.
 
     Args:
         results: Dictionary containing experiment results
-        config: Experiment configuration
+        output_dir: Directory to save output plots
     """
     try:
-        # Get fixed and varying parameters
-        fixed_params = config.get_fixed_params()
-        varying_params = config.get_varying_params()
-
-        # Get x-axis values and labels
-        x_values = varying_params[config.x_axis]
-        x_labels = {
-            "noise": "Noise Level",
-            "dimension_ratio": "Hidden Dimension / Signal Dimension Ratio",
-            "curvature": "Curvature Scale",
-            "space_type": "Space Type",
+        # Define metrics to plot
+        metrics = [
+            "reconstruction_loss",
+            "l1_loss",
+            "sparsity",
+            "activation_magnitude",
+            "cosine_similarity",
+            "activation_similarity",
+        ]
+        metric_labels = {
+            "reconstruction_loss": "Reconstruction Loss",
+            "l1_loss": "L1 Loss",
+            "sparsity": "Sparsity",
+            "activation_magnitude": "Activation Magnitude",
+            "cosine_similarity": "Cosine Similarity",
+            "activation_similarity": "Activation Similarity",
         }
 
-        # Get series values and labels
-        series_values = varying_params[config.plot_series]
-        series_labels = {
-            "noise": lambda v: f"Noise Level = {v}",
-            "dimension_ratio": lambda v: f"Dim Ratio = {v}",
-            "curvature": lambda v: f"Curvature = {v}",
-            "space_type": lambda v: f"Space = {v}",
-        }
-
-        # Create a plot for each metric
-        for metric in config.metrics_to_plot:
+        # Plot each metric
+        for metric in metrics:
             plt.figure(figsize=(10, 6))
+            x_values = list(results.keys())
+            y_values = [np.mean(results[x][metric]) for x in x_values]
+            y_errors = [np.std(results[x][metric]) for x in x_values]
 
-            # Plot each series
-            for series_val in series_values:
-                # Get the results for this series value
-                series_results = results[False][series_val]
+            plt.errorbar(
+                x_values,
+                y_values,
+                yerr=y_errors,
+                capsize=5,
+            )
 
-                # Plot non-sparse case
-                (line,) = plt.plot(
-                    x_values,
-                    series_results[metric],
-                    "-",
-                    label=series_labels[config.plot_series](series_val),
-                )
-
-                # Plot sparse case if configured
-                if config.include_sparse:
-                    sparse_results = results[True][series_val]
-
-                    plt.plot(
-                        x_values,
-                        sparse_results[metric],
-                        "--",
-                        color=line.get_color(),
-                        label=f"{series_labels[config.plot_series](series_val)} (sparse)",
-                    )
-
-            # Add fixed parameters to title
-            fixed_params_str = ", ".join(f"{k} = {v}" for k, v in fixed_params.items())
-            plt.xlabel(x_labels[config.x_axis])
-            plt.ylabel(f"Test {config.metric_labels[metric]}")
-            plt.title(f"{config.metric_labels[metric]} vs {x_labels[config.x_axis]}\nFixed: {fixed_params_str}")
+            plt.xlabel("Signal-to-Noise Ratio")
+            plt.ylabel(metric_labels[metric])
+            plt.title(f"{metric_labels[metric]} vs Signal-to-Noise Ratio")
             plt.grid(True)
-            plt.legend()
-            plt.tight_layout()
-            plt.savefig(Path(config.output_dir) / f"{config.x_axis}_{metric}.png")
+
+            # Save the plot
+            plt.savefig(Path(output_dir) / f"{metric}.png")
             plt.close()
 
     except Exception as e:
@@ -301,108 +197,128 @@ def plot_results(results: dict[bool, dict[Any, dict[str, list[float]]]], config:
         raise
 
 
-def run_noise_experiment(config: ExperimentConfig = default_config) -> None:
+def run_experiment(
+    # Dataset parameters
+    base_signal_dim: int = 10,
+    n_train_samples: int = 1000,
+    n_test_samples: int = 200,
+    signal_to_noise_ratio: float = 10.0,  # Higher means cleaner signals
+    superposition_multiplier: float = 1.0,  # Controls number of signals
+    non_euclidean: float = 0.0,  # 0: Euclidean; 1: fully warped
+    non_orthogonal: float = 0.0,  # 0: fully orthogonal; 1: as generated
+    hierarchical: float = 0.0,  # 0: independent; 1: clustered
+    # Model parameters
+    hidden_dim_ratio: float = 1.0,  # Ratio of hidden dimension to input dimension
+    sparsity_weight: float = 0.01,  # Weight for L1 regularization
+    n_epochs: int = 100,
+    lr: float = 0.001,
+    batch_size: int = 32,
+    early_stopping_patience: int = 10,
+    # Experiment parameters
+    output_dir: str = "images",
+) -> None:
     """
-    Run experiment varying noise levels for hyperbolic space.
+    Run the complete experiment with the given parameters.
 
     Args:
-        config: Experiment configuration. Uses hyperbolic_noise_config if not specified.
+        base_signal_dim: Dimension of the base signal
+        n_train_samples: Number of training samples
+        n_test_samples: Number of test samples
+        signal_to_noise_ratio: Signal-to-noise ratio (higher means cleaner signals)
+        superposition_multiplier: Controls number of signals
+        non_euclidean: Degree of non-linear warping (0: Euclidean; 1: fully warped)
+        non_orthogonal: Degree of non-orthogonality (0: fully orthogonal; 1: as generated)
+        hierarchical: Degree of hierarchical structure (0: independent; 1: clustered)
+        hidden_dim_ratio: Ratio of hidden dimension to input dimension
+        sparsity_weight: Weight for L1 regularization
+        n_epochs: Number of training epochs
+        lr: Learning rate
+        batch_size: Batch size
+        early_stopping_patience: Number of epochs to wait before early stopping
+        output_dir: Directory to save output plots
     """
     try:
-        # Define noise levels to test
-        noise_levels = np.linspace(0.0, 2.0, 20)  # From no noise to high noise
+        # Create output directory
+        Path(output_dir).mkdir(exist_ok=True)
 
         # Initialize results storage
-        results: dict[str, list[float]] = {
-            "reconstruction_loss": [],
-            "l1_loss": [],
-            "sparsity": [],
-            "activation_magnitude": [],
-            "cosine_similarity": [],
-            "activation_similarity": [],
+        results = {
+            signal_to_noise_ratio: {
+                "reconstruction_loss": [],
+                "l1_loss": [],
+                "sparsity": [],
+                "activation_magnitude": [],
+                "cosine_similarity": [],
+                "activation_similarity": [],
+            }
         }
 
-        # Run experiments for each noise level
-        for noise_level in tqdm(noise_levels, desc="Noise levels"):
-            # Update config with current noise level
-            current_config = ExperimentConfig(**{**config.__dict__, "noise_level": float(noise_level)})
+        # Create datasets
+        train_dataset = SyntheticDataset(
+            n_samples=n_train_samples,
+            activation_size=base_signal_dim,
+            signal_to_noise_ratio=signal_to_noise_ratio,
+            superposition_multiplier=superposition_multiplier,
+            non_euclidean=non_euclidean,
+            non_orthogonal=non_orthogonal,
+            hierarchical=hierarchical,
+        )
+        test_dataset = SyntheticDataset(
+            n_samples=n_test_samples,
+            activation_size=base_signal_dim,
+            signal_to_noise_ratio=signal_to_noise_ratio,
+            superposition_multiplier=superposition_multiplier,
+            non_euclidean=non_euclidean,
+            non_orthogonal=non_orthogonal,
+            hierarchical=hierarchical,
+            seed=43,  # Different seed for test set
+        )
 
-            # Create datasets
-            train_dataset = SyntheticDataset(
-                current_config.n_train_samples,
-                current_config.base_signal_dim,
-                current_config.noise_level,
-                current_config.signal_sparsity,
-                current_config.curvature_scales[0] if current_config.curvature_scales is not None else -1.0,
-                space_type=current_config.space_type,
-            )
-            test_dataset = SyntheticDataset(
-                current_config.n_test_samples,
-                current_config.base_signal_dim,
-                current_config.noise_level,
-                current_config.signal_sparsity,
-                current_config.curvature_scales[0] if current_config.curvature_scales is not None else -1.0,
-                space_type=current_config.space_type,
-                seed=43,
-            )
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=False, num_workers=0)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=False, num_workers=0)
 
-            train_loader = DataLoader(
-                train_dataset, batch_size=current_config.batch_size, shuffle=True, pin_memory=False, num_workers=0
-            )
-            test_loader = DataLoader(
-                test_dataset, batch_size=current_config.batch_size, pin_memory=False, num_workers=0
-            )
+        # Train and evaluate
+        metrics = train_sae(
+            train_loader,
+            test_loader,
+            base_signal_dim,
+            int(base_signal_dim * hidden_dim_ratio),
+            sparsity_weight,
+            n_epochs,
+            lr,
+            early_stopping_patience,
+        )
 
-            # Train and evaluate
-            metrics = train_sae(
-                train_loader,
-                test_loader,
-                current_config.base_signal_dim,
-                current_config.base_signal_dim,  # hidden_dim = input_dim
-                current_config.sparsity_weight,
-                current_config.n_epochs,
-                current_config.lr,
-                current_config.early_stopping_patience,
-            )
-
-            # Store results
-            for metric, value in metrics.items():
-                results[metric].append(value)
+        # Store results
+        for metric in metrics:
+            results[signal_to_noise_ratio][metric].append(metrics[metric])
 
         # Plot results
-        plot_noise_results(results, noise_levels, config)
+        plot_results(results, output_dir)
 
     except Exception as e:
-        logger.error(f"Error running noise experiment: {str(e)}")
-        raise
-
-
-def plot_noise_results(results: dict[str, list[float]], noise_levels: np.ndarray, config: ExperimentConfig) -> None:
-    """
-    Plot and save the noise experiment results.
-
-    Args:
-        results: Dictionary containing experiment results
-        noise_levels: Array of noise levels tested
-        config: Experiment configuration
-    """
-    try:
-        # Create a plot for each metric
-        for metric in config.metrics_to_plot:
-            plt.figure(figsize=(10, 6))
-            plt.plot(noise_levels, results[metric], "-o")
-            plt.xlabel("Noise Level")
-            plt.ylabel(f"Test {config.metric_labels[metric]}")
-            plt.title(f"{config.metric_labels[metric]} vs Noise Level")
-            plt.grid(True)
-            plt.tight_layout()
-            plt.savefig(Path(config.output_dir) / f"noise_{metric}.png")
-            plt.close()
-
-    except Exception as e:
-        logger.error(f"Error plotting noise results: {str(e)}")
+        logger.error(f"Error running experiment: {str(e)}")
         raise
 
 
 if __name__ == "__main__":
-    run_noise_experiment()
+    run_experiment(
+        # Dataset parameters
+        base_signal_dim=10,
+        n_train_samples=1000,
+        n_test_samples=200,
+        signal_to_noise_ratio=10.0,
+        superposition_multiplier=1.0,
+        non_euclidean=0.0,
+        non_orthogonal=0.0,
+        hierarchical=0.0,
+        # Model parameters
+        hidden_dim_ratio=1.0,
+        sparsity_weight=0.01,
+        n_epochs=100,
+        lr=0.001,
+        batch_size=32,
+        early_stopping_patience=10,
+        # Experiment parameters
+        output_dir="images",
+    )
