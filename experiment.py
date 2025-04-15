@@ -197,7 +197,6 @@ def plot_results(results: dict[str, dict[float, dict[str, list[float]]]], output
 
         # Define colors for each SAE type
         colors = {
-            "vanilla": "blue",
             "batch_topk": "red",
             "matryoshka": "green",
         }
@@ -296,20 +295,6 @@ def run_experiment(
 
         # Initialize results storage for each SAE type
         results: dict[str, dict[float, dict[str, list[float]]]] = {
-            "vanilla": {
-                x_val: {
-                    metric: []
-                    for metric in [
-                        "reconstruction_loss",
-                        "l1_loss",
-                        "sparsity",
-                        "activation_magnitude",
-                        "cosine_similarity",
-                        "activation_similarity",
-                    ]
-                }
-                for x_val in x_axis_values
-            },
             "batch_topk": {
                 x_val: {
                     metric: []
@@ -380,12 +365,12 @@ def run_experiment(
             test_loader = DataLoader(test_dataset, batch_size=batch_size, pin_memory=False, num_workers=0)
 
             # Train and evaluate each SAE type
-            for sae_type in ["vanilla", "batch_topk", "matryoshka"]:
+            for sae_type in ["batch_topk", "matryoshka"]:
                 metrics = train_sae(
                     train_loader,
                     test_loader,
                     int(current_params["activation_size"]),
-                    dictionary_size,  # Use dictionary_size instead of activation_size
+                    dictionary_size,
                     sparsity_weight,
                     n_epochs,
                     lr,
@@ -408,10 +393,10 @@ def run_experiment(
 
 if __name__ == "__main__":
     # Dataset parameters
-    activation_size = 128  # mimiking d_model
-    dictionary_size = 512  # SAE dictionary size
-    n_train_samples = 10000
-    n_test_samples = 2000
+    activation_size = 64  # mimiking d_model
+    dictionary_size = 256  # SAE dictionary size
+    n_train_samples = int(1e6)  # Convert to integer
+    n_test_samples = int(1e4)  # Convert to integer
     signal_to_noise_ratio = 10.0  # Higher means cleaner signals
     superposition_multiplier = 1.0  # Controls number of signals
     non_euclidean = 0.0  # 0: Euclidean; 1: fully warped
@@ -419,26 +404,26 @@ if __name__ == "__main__":
     hierarchical = 0.0  # 0: independent; 1: clustered
 
     # Model parameters
-    sparsity_weight = 0.01  # Weight for L1 regularization
-    n_epochs = 200
-    lr = 0.001
-    batch_size = 32
-    early_stopping_patience = 10
+    sparsity_weight = 0.005  # Reduce from 0.01 to allow denser representations
+    n_epochs = 150
+    lr = 0.002  # Slightly increase learning rate
+    batch_size = 64  # Increase batch size for more stable gradients
+    early_stopping_patience = 15  # Give more patience for convergence
 
     # Experiment parameters
     output_dir = "images"
-    x_axis_param = "non_euclidean"  # Parameter to vary on x-axis
+    x_axis_param = "hierarchical"  # Parameter to vary on x-axis
 
     if x_axis_param == "signal_to_noise_ratio":
-        x_axis_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0]
+        x_axis_values = [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
     elif x_axis_param == "superposition_multiplier":
-        x_axis_values = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0]
+        x_axis_values = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
     elif x_axis_param == "non_euclidean":
         x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     elif x_axis_param == "non_orthogonal":
-        x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        x_axis_values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     elif x_axis_param == "hierarchical":
-        x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        x_axis_values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     else:
         raise ValueError(f"Unknown x-axis parameter: {x_axis_param}")
 
@@ -448,9 +433,9 @@ if __name__ == "__main__":
         "seed": 42,
         "input_unit_norm": False,
         "n_batches_to_dead": 10,
-        "top_k": 10,
-        "top_k_aux": 5,
-        "aux_penalty": 0.1,
+        "top_k": 32,
+        "top_k_aux": 10,
+        "aux_penalty": 0.05,
         "group_sizes": [
             dictionary_size // 16,
             dictionary_size // 16,
