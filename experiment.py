@@ -420,7 +420,7 @@ if __name__ == "__main__":
 
     # Model parameters
     sparsity_weight = 0.01  # Weight for L1 regularization
-    n_epochs = 100
+    n_epochs = 200
     lr = 0.001
     batch_size = 32
     early_stopping_patience = 10
@@ -430,9 +430,9 @@ if __name__ == "__main__":
     x_axis_param = "non_euclidean"  # Parameter to vary on x-axis
 
     if x_axis_param == "signal_to_noise_ratio":
-        x_axis_values = [0.1, 1.0, 2.0, 5.0, 10.0, 100.0]
+        x_axis_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0]
     elif x_axis_param == "superposition_multiplier":
-        x_axis_values = [1.0, 2.0, 5.0, 10.0, 100.0]
+        x_axis_values = [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0]
     elif x_axis_param == "non_euclidean":
         x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     elif x_axis_param == "non_orthogonal":
