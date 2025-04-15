@@ -95,9 +95,27 @@ def generate_synthetic_data(
             q, _ = torch.linalg.qr(signals)
             orthogonal_signals = q
         else:
-            # If you have more signals than the dimension, full orthogonalization is impossible.
-            orthogonal_signals = signals
-        # Interpolate between the original and the orthogonal signals.
+            # If you have more signals than the dimension, we can't fully orthogonalize
+            # Instead, we'll orthogonalize in chunks of size activation_size
+            n_chunks = (n_signals + activation_size - 1) // activation_size
+            orthogonal_signals = []
+            for i in range(n_chunks):
+                start_idx = i * activation_size
+                end_idx = min((i + 1) * activation_size, n_signals)
+                chunk = signals[start_idx:end_idx]
+                if chunk.shape[0] < activation_size:
+                    # Pad with zeros if needed
+                    padding = torch.zeros(activation_size - chunk.shape[0], activation_size, device=signals.device)
+                    chunk = torch.cat([chunk, padding], dim=0)
+                q, _ = torch.linalg.qr(chunk)
+                # Only take the actual signals, not the padding
+                orthogonal_signals.append(q[: end_idx - start_idx])
+            orthogonal_signals = torch.cat(orthogonal_signals, dim=0)
+            # Ensure the final tensor has the same shape as the original signals
+            if orthogonal_signals.shape != signals.shape:
+                orthogonal_signals = orthogonal_signals[:n_signals]
+
+        # Interpolate between the original and the orthogonal signals
         signals = (non_orthogonal * signals) + ((1 - non_orthogonal) * orthogonal_signals)
         signals = signals / signals.norm(dim=1, keepdim=True)
 

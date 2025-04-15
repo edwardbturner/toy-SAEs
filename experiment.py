@@ -393,10 +393,10 @@ def run_experiment(
 
 if __name__ == "__main__":
     # Dataset parameters
-    activation_size = 64  # mimiking d_model
-    dictionary_size = 256  # SAE dictionary size
-    n_train_samples = int(1e6)  # Convert to integer
-    n_test_samples = int(1e4)  # Convert to integer
+    activation_size = 16  # mimiking d_model
+    dictionary_size = 64  # SAE dictionary size
+    n_train_samples = 5000  # Convert to integer
+    n_test_samples = 1000  # Convert to integer
     signal_to_noise_ratio = 10.0  # Higher means cleaner signals
     superposition_multiplier = 1.0  # Controls number of signals
     non_euclidean = 0.0  # 0: Euclidean; 1: fully warped
@@ -412,7 +412,7 @@ if __name__ == "__main__":
 
     # Experiment parameters
     output_dir = "images"
-    x_axis_param = "hierarchical"  # Parameter to vary on x-axis
+    x_axis_param = "non_orthogonal"  # Parameter to vary on x-axis
 
     if x_axis_param == "signal_to_noise_ratio":
         x_axis_values = [0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
@@ -421,7 +421,7 @@ if __name__ == "__main__":
     elif x_axis_param == "non_euclidean":
         x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     elif x_axis_param == "non_orthogonal":
-        x_axis_values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        x_axis_values = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     elif x_axis_param == "hierarchical":
         x_axis_values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     else:
@@ -433,8 +433,8 @@ if __name__ == "__main__":
         "seed": 42,
         "input_unit_norm": False,
         "n_batches_to_dead": 10,
-        "top_k": 32,
-        "top_k_aux": 10,
+        "top_k": 16,
+        "top_k_aux": 8,
         "aux_penalty": 0.05,
         "group_sizes": [
             dictionary_size // 16,
