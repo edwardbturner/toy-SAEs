@@ -5,7 +5,7 @@ Experiments with Sparse Autoencoders (SAEs) on toy datasets.
 
 ---
 
-While preparing a presentation, I found the following insight from **Arthur Conmy** worth flagging for anyone considering using toy datasets:
+While presenting some work around this, I found the following insight from **Arthur Conmy** worth flagging for anyone considering using toy datasets:
 
 > *"We tried toy data as in [this LessWrong post](https://www.lesswrong.com/posts/z6QQJbtpkEAX3Aojj/interim-research-report-taking-features-out-of-superposition) for a month at GDM in 2023 and it was not useful IMO. Just training SAEs on tiny real language models like GELU-1L seems more helpful (e.g. I think Sen came up with Gated SAEs and JUmpRelu SAEs by iterating on GELU-1L)."*
 
