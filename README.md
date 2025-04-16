@@ -31,6 +31,6 @@ This project implements and experiments with Sparse Autoencoders (SAEs) on synth
 
 ## Installation
 ```bash
-git clone https://github.com/your-username/toy-SAEs.git
+git clone https://github.com/edwardbturner/toy-SAEs.git
 cd toy-SAEs
 pip install -r requirements.txt
